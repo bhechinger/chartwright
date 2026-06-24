@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "demo-basic-chart"
+  namespace: "testing"
+data:
+  chart: "basic-chart"
+  name: "from-default"
+  nested: |
+    name: from-default

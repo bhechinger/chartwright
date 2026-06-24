@@ -1,0 +1,14 @@
+[package]
+name = "helm-rs-abi"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+libloading.workspace = true
+tempfile.workspace = true

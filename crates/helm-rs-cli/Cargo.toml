@@ -1,0 +1,24 @@
+[package]
+name = "helm-rs-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "helm-rs"
+path = "src/main.rs"
+
+[lib]
+name = "helm_rs_cli"
+path = "src/lib.rs"
+
+[dependencies]
+clap.workspace = true
+helm-rs-runtime = { path = "../helm-rs-runtime" }
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
