@@ -287,6 +287,8 @@ name = "{package_name}"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
@@ -450,13 +452,17 @@ fn relative_path(from_dir: &Path, to: &Path) -> PathBuf {
 }
 
 fn absolute_path(path: &Path) -> PathBuf {
-    if path.is_absolute() {
+    if let Ok(path) = path.canonicalize() {
+        return path;
+    }
+    let path = if path.is_absolute() {
         path.to_owned()
     } else {
         std::env::current_dir()
             .expect("current directory is available")
             .join(path)
-    }
+    };
+    path
 }
 
 fn read_to_string(path: &Path) -> Result<String, ImportError> {

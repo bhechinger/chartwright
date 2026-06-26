@@ -28,6 +28,8 @@ enum Command {
         namespace: String,
         #[arg(long)]
         values: Option<PathBuf>,
+        /// Kubernetes version to target (e.g. "1.30.0"). Keep aligned with the
+        /// oldest cluster version still receiving upstream support.
         #[arg(long, default_value = "1.30.0")]
         kube_version: String,
         #[arg(long = "api-version")]

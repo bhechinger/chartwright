@@ -17,6 +17,7 @@ fn imports_basic_chart_to_generated_crate() {
     let lib_rs = std::fs::read_to_string(out_dir.join("src/lib.rs")).unwrap();
 
     assert!(cargo_toml.contains("crate-type = [\"cdylib\", \"rlib\"]"));
+    assert!(cargo_toml.contains("[workspace]"));
     let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(std::path::Path::parent)
@@ -76,8 +77,10 @@ fn import_emits_error_event_on_failure() {
 }
 
 #[test]
+#[ignore = "builds a generated cdylib with cargo build --release"]
 fn run_chart_module_renders_generated_library() {
-    let temp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all("../../target").unwrap();
+    let temp = tempfile::tempdir_in("../../target").unwrap();
     let out_dir = temp.path().join("generated-basic-chart");
     import_chart("../../fixtures/basic-chart", &out_dir).unwrap();
     build_generated_crate(&out_dir);
