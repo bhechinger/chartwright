@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "helm-rs")]
+#[command(name = "chartwright")]
 #[command(about = "Import Helm charts into loadable Rust render modules")]
 struct Cli {
     #[command(subcommand)]
@@ -25,10 +25,10 @@ fn main() {
         Command::Import {
             chart_dir,
             crate_dir,
-        } => helm_rs_cli::import_chart_with_events(
+        } => chartwright_cli::import_chart_with_events(
             chart_dir,
             crate_dir,
-            helm_rs_cli::StderrEventSink,
+            chartwright_cli::StderrEventSink,
         ),
     };
 

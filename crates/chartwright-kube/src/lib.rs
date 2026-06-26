@@ -1,4 +1,4 @@
-use helm_rs_events::{Event, EventLevel, EventSink};
+use chartwright_events::{Event, EventLevel, EventSink};
 use kube::{
     api::{Api, DeleteParams, DynamicObject, Patch, PatchParams},
     core::GroupVersionKind,
@@ -252,43 +252,48 @@ pub fn inject_tracking_metadata(
         metadata,
         "labels",
         "app.kubernetes.io/managed-by",
-        "helm-rs",
+        "chartwright",
     );
-    insert_map_value(metadata, "labels", "helm-rs.io/release-id", &release_id);
+    insert_map_value(metadata, "labels", "chartwright.io/release-id", &release_id);
     insert_map_value(
         metadata,
         "annotations",
-        "helm-rs.io/release-name",
+        "chartwright.io/release-name",
         &options.release.name,
     );
     insert_map_value(
         metadata,
         "annotations",
-        "helm-rs.io/release-namespace",
+        "chartwright.io/release-namespace",
         &options.release.namespace,
     );
     insert_map_value(
         metadata,
         "annotations",
-        "helm-rs.io/resource-id",
+        "chartwright.io/resource-id",
         &resource.id.canonical(),
     );
     if let Some(chart) = &options.chart {
         insert_map_value(
             metadata,
             "annotations",
-            "helm-rs.io/chart-name",
+            "chartwright.io/chart-name",
             &chart.name,
         );
         insert_map_value(
             metadata,
             "annotations",
-            "helm-rs.io/chart-version",
+            "chartwright.io/chart-version",
             &chart.version,
         );
     }
     if let Some(owner) = &options.owner {
-        insert_map_value(metadata, "annotations", "helm-rs.io/owner-uid", &owner.uid);
+        insert_map_value(
+            metadata,
+            "annotations",
+            "chartwright.io/owner-uid",
+            &owner.uid,
+        );
         if owner_reference_allowed(owner, &resource.id) {
             metadata.insert(
                 "ownerReferences".to_owned(),
@@ -545,7 +550,7 @@ pub async fn delete_release<S: EventSink>(
 }
 
 pub fn inventory_name(release_id: &str) -> String {
-    format!("helm-rs-inventory-{release_id}")
+    format!("chartwright-inventory-{release_id}")
 }
 
 pub fn inventory_resource_id(options: &ApplyOptions) -> ResourceId {
@@ -728,12 +733,12 @@ async fn write_inventory(
             "name": id.name,
             "namespace": id.namespace,
             "labels": {
-                "app.kubernetes.io/managed-by": "helm-rs",
-                "helm-rs.io/release-id": options.release_id(),
+                "app.kubernetes.io/managed-by": "chartwright",
+                "chartwright.io/release-id": options.release_id(),
             },
             "annotations": {
-                "helm-rs.io/release-name": options.release.name,
-                "helm-rs.io/release-namespace": options.release.namespace,
+                "chartwright.io/release-name": options.release.name,
+                "chartwright.io/release-namespace": options.release.namespace,
             }
         },
         "data": {
@@ -863,7 +868,7 @@ fn insert_map_value(
         .or_insert_with(|| Value::Object(Map::new()));
     let parent = parent
         .as_object_mut()
-        .expect("metadata child maps are controlled by helm-rs");
+        .expect("metadata child maps are controlled by chartwright");
     parent.insert(key.to_owned(), Value::String(value.to_owned()));
 }
 

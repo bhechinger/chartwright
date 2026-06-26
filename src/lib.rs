@@ -1,1 +1,1 @@
-// Integration-test host crate for the helm-rs workspace.
+// Integration-test host crate for the chartwright workspace.

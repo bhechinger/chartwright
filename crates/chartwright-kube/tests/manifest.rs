@@ -1,4 +1,4 @@
-use helm_rs_kube::{
+use chartwright_kube::{
     apply_order, inject_tracking_metadata, parse_rendered_manifest, prune_order, release_id,
     ApplyOptions, ChartIdentity, OwnerIdentity, ReleaseIdentity, ResourceAction,
 };
@@ -20,7 +20,7 @@ fn options() -> ApplyOptions {
             name: "basic-chart".to_owned(),
             version: "0.1.0".to_owned(),
         }),
-        field_manager: "helm-rs".to_owned(),
+        field_manager: "chartwright".to_owned(),
         force_conflicts: false,
         prune: true,
         inventory_namespace: None,
@@ -75,10 +75,10 @@ metadata:
     assert_eq!(report.action, ResourceAction::Skipped);
     assert_eq!(
         resources[0].value["metadata"]["labels"]["app.kubernetes.io/managed-by"],
-        "helm-rs"
+        "chartwright"
     );
     assert_eq!(
-        resources[0].value["metadata"]["annotations"]["helm-rs.io/chart-name"],
+        resources[0].value["metadata"]["annotations"]["chartwright.io/chart-name"],
         "basic-chart"
     );
     assert_eq!(

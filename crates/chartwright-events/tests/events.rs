@@ -1,4 +1,4 @@
-use helm_rs_events::{Event, EventLevel, EventSink, InMemoryEventSink};
+use chartwright_events::{Event, EventLevel, EventSink, InMemoryEventSink};
 
 #[test]
 fn in_memory_sink_records_events_in_order() {

@@ -1,4 +1,6 @@
-use helm_rs_cli::{import_chart, import_chart_with_events, Event, EventLevel, InMemoryEventSink};
+use chartwright_cli::{
+    import_chart, import_chart_with_events, Event, EventLevel, InMemoryEventSink,
+};
 
 #[test]
 fn imports_basic_chart_to_generated_crate() {
@@ -11,7 +13,7 @@ fn imports_basic_chart_to_generated_crate() {
     let lib_rs = std::fs::read_to_string(out_dir.join("src/lib.rs")).unwrap();
 
     assert!(cargo_toml.contains("crate-type = [\"cdylib\", \"rlib\"]"));
-    assert!(lib_rs.contains("helm_rs_render_json"));
+    assert!(lib_rs.contains("chartwright_render_json"));
     assert!(lib_rs.contains("Chart.yaml"));
     assert!(lib_rs.contains("templates/configmap.yaml"));
     assert!(lib_rs.contains("templates/_helpers.tpl"));

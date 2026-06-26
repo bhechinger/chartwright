@@ -1,5 +1,5 @@
-use helm_rs_events::{Event, InMemoryEventSink};
-use helm_rs_kube::{
+use chartwright_events::{Event, InMemoryEventSink};
+use chartwright_kube::{
     build_apply_plan, ApplyOptions, ChartIdentity, ReleaseIdentity, ResourceAction,
 };
 
@@ -14,7 +14,7 @@ fn options() -> ApplyOptions {
             name: "basic-chart".to_owned(),
             version: "0.1.0".to_owned(),
         }),
-        field_manager: "helm-rs".to_owned(),
+        field_manager: "chartwright".to_owned(),
         force_conflicts: false,
         prune: true,
         inventory_namespace: None,
@@ -52,9 +52,9 @@ metadata:
 
 #[test]
 fn build_apply_plan_reports_pruned_inventory_resources() {
-    let previous = helm_rs_kube::Inventory {
+    let previous = chartwright_kube::Inventory {
         release_id: options().release_id(),
-        resources: vec![helm_rs_kube::ResourceId {
+        resources: vec![chartwright_kube::ResourceId {
             group: String::new(),
             version: "v1".to_owned(),
             kind: "Secret".to_owned(),

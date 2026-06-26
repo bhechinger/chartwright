@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub use helm_rs_events::{
+pub use chartwright_events::{
     Event, EventLevel, EventSink, InMemoryEventSink, NoopEventSink, StderrEventSink,
 };
 use thiserror::Error;
@@ -242,12 +242,12 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-helm-rs-abi = {{ path = "{}", default-features = false }}
-helm-rs-runtime = {{ path = "{}" }}
+chartwright-abi = {{ path = "{}", default-features = false }}
+chartwright-runtime = {{ path = "{}" }}
 serde_json = "1"
 "#,
-        root.join("crates/helm-rs-abi").display(),
-        root.join("crates/helm-rs-runtime").display()
+        root.join("crates/chartwright-abi").display(),
+        root.join("crates/chartwright-runtime").display()
     )
 }
 
@@ -262,8 +262,8 @@ fn generated_lib_rs(chart_name: &str, chart_version: &str, files: &[SourceFile])
         })
         .collect::<String>();
     format!(
-        r#"use helm_rs_abi::{{buffer_from_bytes, error_buffer, free_buffer, AbiBuffer, ModuleInfo, RenderRequest, ABI_VERSION}};
-use helm_rs_runtime::{{render_chart, CapabilitiesInput, Chart, ChartFile, ReleaseInput, RenderInput}};
+        r#"use chartwright_abi::{{buffer_from_bytes, error_buffer, free_buffer, AbiBuffer, ModuleInfo, RenderRequest, ABI_VERSION}};
+use chartwright_runtime::{{render_chart, CapabilitiesInput, Chart, ChartFile, ReleaseInput, RenderInput}};
 
 fn chart() -> Chart {{
     Chart {{
@@ -288,7 +288,7 @@ fn render(input: RenderRequest) -> Result<String, String> {{
 }}
 
 #[no_mangle]
-pub unsafe extern "C" fn helm_rs_render_json(input_ptr: *const u8, input_len: usize, out_ptr: *mut AbiBuffer) -> i32 {{
+pub unsafe extern "C" fn chartwright_render_json(input_ptr: *const u8, input_len: usize, out_ptr: *mut AbiBuffer) -> i32 {{
     if input_ptr.is_null() || out_ptr.is_null() {{
         return 2;
     }}
@@ -313,7 +313,7 @@ pub unsafe extern "C" fn helm_rs_render_json(input_ptr: *const u8, input_len: us
 }}
 
 #[no_mangle]
-pub unsafe extern "C" fn helm_rs_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
+pub unsafe extern "C" fn chartwright_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
     if out_ptr.is_null() {{
         return 2;
     }}
@@ -321,7 +321,7 @@ pub unsafe extern "C" fn helm_rs_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
         abi_version: ABI_VERSION,
         chart_name: {chart_name:?}.to_owned(),
         chart_version: {chart_version:?}.to_owned(),
-        runtime_version: helm_rs_runtime::runtime_version().to_owned(),
+        runtime_version: chartwright_runtime::runtime_version().to_owned(),
     }};
     match serde_json::to_vec(&info) {{
         Ok(output) => {{
@@ -336,7 +336,7 @@ pub unsafe extern "C" fn helm_rs_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
 }}
 
 #[no_mangle]
-pub unsafe extern "C" fn helm_rs_free(buffer: AbiBuffer) {{
+pub unsafe extern "C" fn chartwright_free(buffer: AbiBuffer) {{
     free_buffer(buffer);
 }}
 "#
@@ -367,7 +367,7 @@ fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("helm-rs-cli is under crates/helm-rs-cli")
+        .expect("chartwright-cli is under crates/chartwright-cli")
         .to_owned()
 }
 

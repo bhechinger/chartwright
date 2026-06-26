@@ -1,12 +1,12 @@
 [package]
-name = "helm-rs-kube"
+name = "chartwright-kube"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-helm-rs-events = { path = "../helm-rs-events" }
+chartwright-events = { path = "../chartwright-events" }
 hex.workspace = true
 kube.workspace = true
 serde.workspace = true

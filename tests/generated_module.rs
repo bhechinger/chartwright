@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use helm_rs_abi::{AbiBuffer, LoadError, LoadedChartModule, RenderRequest};
+use chartwright_abi::{AbiBuffer, LoadError, LoadedChartModule, RenderRequest};
 use libloading::{Library, Symbol};
 
 type RenderJson = unsafe extern "C" fn(*const u8, usize, *mut AbiBuffer) -> i32;
@@ -10,7 +10,7 @@ type FreeBuffer = unsafe extern "C" fn(AbiBuffer);
 fn generated_module_renders_when_hot_loaded() {
     let temp = tempfile::tempdir().unwrap();
     let generated = temp.path().join("generated-basic-chart");
-    helm_rs_cli::import_chart("fixtures/basic-chart", &generated).unwrap();
+    chartwright_cli::import_chart("fixtures/basic-chart", &generated).unwrap();
 
     let status = Command::new("cargo")
         .arg("build")
@@ -33,8 +33,8 @@ fn generated_module_renders_when_hot_loaded() {
 
     unsafe {
         let library = Library::new(library_path).unwrap();
-        let render: Symbol<RenderJson> = library.get(b"helm_rs_render_json").unwrap();
-        let free: Symbol<FreeBuffer> = library.get(b"helm_rs_free").unwrap();
+        let render: Symbol<RenderJson> = library.get(b"chartwright_render_json").unwrap();
+        let free: Symbol<FreeBuffer> = library.get(b"chartwright_free").unwrap();
         let mut output = AbiBuffer::empty();
 
         let code = render(request_json.as_ptr(), request_json.len(), &mut output);
@@ -50,7 +50,7 @@ fn generated_module_renders_when_hot_loaded() {
 fn generated_module_renders_through_safe_loader() {
     let temp = tempfile::tempdir().unwrap();
     let generated = temp.path().join("generated-basic-chart");
-    helm_rs_cli::import_chart("fixtures/basic-chart", &generated).unwrap();
+    chartwright_cli::import_chart("fixtures/basic-chart", &generated).unwrap();
 
     let status = Command::new("cargo")
         .arg("build")
@@ -97,7 +97,7 @@ fn generated_module_returns_structured_json_errors() {
     .unwrap();
 
     let generated = temp.path().join("generated-unsupported-chart");
-    helm_rs_cli::import_chart(&chart, &generated).unwrap();
+    chartwright_cli::import_chart(&chart, &generated).unwrap();
     let status = Command::new("cargo")
         .arg("build")
         .arg("--release")
@@ -117,8 +117,8 @@ fn generated_module_returns_structured_json_errors() {
 
     unsafe {
         let library = Library::new(dynamic_library_path(&generated, "unsupported_chart")).unwrap();
-        let render: Symbol<RenderJson> = library.get(b"helm_rs_render_json").unwrap();
-        let free: Symbol<FreeBuffer> = library.get(b"helm_rs_free").unwrap();
+        let render: Symbol<RenderJson> = library.get(b"chartwright_render_json").unwrap();
+        let free: Symbol<FreeBuffer> = library.get(b"chartwright_free").unwrap();
         let mut output = AbiBuffer::empty();
 
         let code = render(request_json.as_ptr(), request_json.len(), &mut output);
@@ -150,7 +150,7 @@ fn safe_loader_returns_module_errors() {
     .unwrap();
 
     let generated = temp.path().join("generated-unsupported-chart");
-    helm_rs_cli::import_chart(&chart, &generated).unwrap();
+    chartwright_cli::import_chart(&chart, &generated).unwrap();
     let status = Command::new("cargo")
         .arg("build")
         .arg("--release")

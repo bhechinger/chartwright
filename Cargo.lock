@@ -117,6 +117,71 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+name = "chartwright-abi"
+version = "0.1.0"
+dependencies = [
+ "libloading",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "chartwright-cli"
+version = "0.1.0"
+dependencies = [
+ "chartwright-events",
+ "chartwright-runtime",
+ "clap",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "chartwright-events"
+version = "0.1.0"
+
+[[package]]
+name = "chartwright-kube"
+version = "0.1.0"
+dependencies = [
+ "chartwright-events",
+ "hex",
+ "k8s-openapi",
+ "kube",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "chartwright-runtime"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror",
+]
+
+[[package]]
+name = "chartwright-workspace"
+version = "0.1.0"
+dependencies = [
+ "chartwright-abi",
+ "chartwright-cli",
+ "libloading",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -391,71 +456,6 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
-name = "helm-rs-abi"
-version = "0.1.0"
-dependencies = [
- "libloading",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "helm-rs-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "helm-rs-events",
- "helm-rs-runtime",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "helm-rs-events"
-version = "0.1.0"
-
-[[package]]
-name = "helm-rs-kube"
-version = "0.1.0"
-dependencies = [
- "helm-rs-events",
- "hex",
- "k8s-openapi",
- "kube",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "helm-rs-runtime"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror",
-]
-
-[[package]]
-name = "helm-rs-workspace"
-version = "0.1.0"
-dependencies = [
- "helm-rs-abi",
- "helm-rs-cli",
- "libloading",
- "serde_json",
- "tempfile",
-]
 
 [[package]]
 name = "hex"

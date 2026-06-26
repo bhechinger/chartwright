@@ -1,4 +1,4 @@
-use helm_rs_runtime::{
+use chartwright_runtime::{
     render_chart, CapabilitiesInput, Chart, ChartFile, ReleaseInput, RenderInput,
 };
 use serde_json::json;

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: basic-chart
-description: Basic chart used by helm-rs tests
+description: Basic chart used by chartwright tests
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
