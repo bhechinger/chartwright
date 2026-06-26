@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use chartwright_abi::{LoadedChartModule, RenderRequest};
 pub use chartwright_events::{
     Event, EventLevel, EventSink, InMemoryEventSink, NoopEventSink, StderrEventSink,
 };
@@ -79,10 +80,57 @@ pub enum ImportError {
     },
 }
 
+#[derive(Debug, Error)]
+pub enum RunError {
+    #[error("module load or render failed: {0}")]
+    Module(#[from] chartwright_abi::LoadError),
+    #[error("io error at {path}: {source}")]
+    Io {
+        path: String,
+        source: std::io::Error,
+    },
+    #[error("invalid values yaml at {path}: {source}")]
+    InvalidValuesYaml {
+        path: String,
+        source: serde_yaml::Error,
+    },
+    #[error("failed to convert values from yaml to json at {path}: {source}")]
+    InvalidValuesJson {
+        path: String,
+        source: serde_json::Error,
+    },
+}
+
 #[derive(Debug)]
 struct SourceFile {
     path: String,
     content: String,
+}
+
+pub fn run_chart_module(
+    library_path: impl AsRef<Path>,
+    request: RenderRequest,
+) -> Result<String, RunError> {
+    let module = LoadedChartModule::load(library_path)?;
+    module.render(request).map_err(RunError::from)
+}
+
+pub fn values_from_file(path: impl AsRef<Path>) -> Result<serde_json::Value, RunError> {
+    let path = path.as_ref();
+    let content = fs::read_to_string(path).map_err(|source| RunError::Io {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let yaml = serde_yaml::from_str::<serde_yaml::Value>(&content).map_err(|source| {
+        RunError::InvalidValuesYaml {
+            path: path.display().to_string(),
+            source,
+        }
+    })?;
+    serde_json::to_value(yaml).map_err(|source| RunError::InvalidValuesJson {
+        path: path.display().to_string(),
+        source,
+    })
 }
 
 pub fn import_chart(
