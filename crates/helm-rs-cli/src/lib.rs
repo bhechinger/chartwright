@@ -141,7 +141,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-helm-rs-abi = {{ path = "{}" }}
+helm-rs-abi = {{ path = "{}", default-features = false }}
 helm-rs-runtime = {{ path = "{}" }}
 serde_json = "1"
 "#,

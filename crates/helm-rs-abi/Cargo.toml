@@ -6,9 +6,14 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+libloading = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
+
+[features]
+default = ["loader"]
+loader = ["dep:libloading"]
 
 [dev-dependencies]
-libloading.workspace = true
 tempfile.workspace = true

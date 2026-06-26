@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use helm_rs_abi::{AbiBuffer, RenderRequest};
+use helm_rs_abi::{AbiBuffer, LoadError, LoadedChartModule, RenderRequest};
 use libloading::{Library, Symbol};
 
 type RenderJson = unsafe extern "C" fn(*const u8, usize, *mut AbiBuffer) -> i32;
@@ -44,6 +44,39 @@ fn generated_module_renders_when_hot_loaded() {
         assert_eq!(code, 0, "{rendered}");
         assert_eq!(rendered, expected);
     }
+}
+
+#[test]
+fn generated_module_renders_through_safe_loader() {
+    let temp = tempfile::tempdir().unwrap();
+    let generated = temp.path().join("generated-basic-chart");
+    helm_rs_cli::import_chart("fixtures/basic-chart", &generated).unwrap();
+
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--release")
+        .current_dir(&generated)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let module = LoadedChartModule::load(dynamic_library_path(&generated, "basic_chart")).unwrap();
+    let info = module.info().unwrap();
+    let rendered = module
+        .render(RenderRequest {
+            release_name: "demo".to_owned(),
+            namespace: "testing".to_owned(),
+            values: serde_json::json!({}),
+            kube_version: "1.30.0".to_owned(),
+            api_versions: vec!["v1".to_owned()],
+        })
+        .unwrap();
+
+    assert_eq!(info.chart_name, "basic-chart");
+    assert_eq!(
+        rendered,
+        std::fs::read_to_string("fixtures/basic-chart/golden.yaml").unwrap()
+    );
 }
 
 #[test]
@@ -96,6 +129,54 @@ fn generated_module_returns_structured_json_errors() {
         assert_eq!(code, 1);
         assert_eq!(error["code"], "render_error");
         assert!(error["message"].as_str().unwrap().contains("unsupported"));
+    }
+}
+
+#[test]
+fn safe_loader_returns_module_errors() {
+    let temp = tempfile::tempdir().unwrap();
+    let chart = temp.path().join("unsupported-chart");
+    std::fs::create_dir_all(chart.join("templates")).unwrap();
+    std::fs::write(
+        chart.join("Chart.yaml"),
+        "apiVersion: v2\nname: unsupported-chart\nversion: 0.1.0\n",
+    )
+    .unwrap();
+    std::fs::write(chart.join("values.yaml"), "{}\n").unwrap();
+    std::fs::write(
+        chart.join("templates/configmap.yaml"),
+        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ lookup \"v1\" \"ConfigMap\" \"\" \"\" }}\n",
+    )
+    .unwrap();
+
+    let generated = temp.path().join("generated-unsupported-chart");
+    helm_rs_cli::import_chart(&chart, &generated).unwrap();
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--release")
+        .current_dir(&generated)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let module =
+        LoadedChartModule::load(dynamic_library_path(&generated, "unsupported_chart")).unwrap();
+    let error = module
+        .render(RenderRequest {
+            release_name: "demo".to_owned(),
+            namespace: "testing".to_owned(),
+            values: serde_json::json!({}),
+            kube_version: "1.30.0".to_owned(),
+            api_versions: vec!["v1".to_owned()],
+        })
+        .unwrap_err();
+
+    match error {
+        LoadError::Module { code, message } => {
+            assert_eq!(code, "render_error");
+            assert!(message.contains("unsupported"));
+        }
+        other => panic!("expected module error, got {other:?}"),
     }
 }
 

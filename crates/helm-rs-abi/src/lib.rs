@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "loader")]
+use thiserror::Error;
 
 pub const ABI_VERSION: u32 = 1;
 
@@ -108,4 +110,97 @@ pub unsafe fn free_buffer(buffer: AbiBuffer) {
         return;
     }
     drop(Vec::from_raw_parts(buffer.ptr, buffer.len, buffer.capacity));
+}
+
+#[cfg(feature = "loader")]
+type RenderJson = unsafe extern "C" fn(*const u8, usize, *mut AbiBuffer) -> i32;
+#[cfg(feature = "loader")]
+type ModuleInfoFn = unsafe extern "C" fn(*mut AbiBuffer) -> i32;
+#[cfg(feature = "loader")]
+type FreeBuffer = unsafe extern "C" fn(AbiBuffer);
+
+#[cfg(feature = "loader")]
+#[derive(Debug, Error)]
+pub enum LoadError {
+    #[error("failed to load module: {0}")]
+    Library(#[from] libloading::Error),
+    #[error("failed to encode render request as json: {0}")]
+    Encode(serde_json::Error),
+    #[error("module returned non-utf8 output: {0}")]
+    Utf8(std::string::FromUtf8Error),
+    #[error("module returned invalid json: {0}")]
+    Decode(serde_json::Error),
+    #[error("module returned abi misuse code {0}")]
+    Abi(i32),
+    #[error("module error {code}: {message}")]
+    Module { code: String, message: String },
+}
+
+#[cfg(feature = "loader")]
+pub struct LoadedChartModule {
+    library: libloading::Library,
+}
+
+#[cfg(feature = "loader")]
+impl LoadedChartModule {
+    pub fn load(path: impl AsRef<std::path::Path>) -> Result<Self, LoadError> {
+        let library = unsafe { libloading::Library::new(path.as_ref())? };
+        unsafe {
+            let _: libloading::Symbol<RenderJson> = library.get(b"helm_rs_render_json")?;
+            let _: libloading::Symbol<ModuleInfoFn> = library.get(b"helm_rs_module_info")?;
+            let _: libloading::Symbol<FreeBuffer> = library.get(b"helm_rs_free")?;
+        }
+        Ok(Self { library })
+    }
+
+    pub fn info(&self) -> Result<ModuleInfo, LoadError> {
+        let mut output = AbiBuffer::empty();
+        let code = unsafe {
+            let module_info: libloading::Symbol<ModuleInfoFn> =
+                self.library.get(b"helm_rs_module_info")?;
+            module_info(&mut output)
+        };
+        let bytes = self.take_output(output)?;
+        match code {
+            0 => serde_json::from_slice(&bytes).map_err(LoadError::Decode),
+            1 => Err(decode_module_error(&bytes)),
+            code => Err(LoadError::Abi(code)),
+        }
+    }
+
+    pub fn render(&self, request: RenderRequest) -> Result<String, LoadError> {
+        let request = serde_json::to_vec(&request).map_err(LoadError::Encode)?;
+        let mut output = AbiBuffer::empty();
+        let code = unsafe {
+            let render: libloading::Symbol<RenderJson> =
+                self.library.get(b"helm_rs_render_json")?;
+            render(request.as_ptr(), request.len(), &mut output)
+        };
+        let bytes = self.take_output(output)?;
+        match code {
+            0 => String::from_utf8(bytes).map_err(LoadError::Utf8),
+            1 => Err(decode_module_error(&bytes)),
+            code => Err(LoadError::Abi(code)),
+        }
+    }
+
+    fn take_output(&self, output: AbiBuffer) -> Result<Vec<u8>, LoadError> {
+        unsafe {
+            let bytes = output.as_slice().to_vec();
+            let free: libloading::Symbol<FreeBuffer> = self.library.get(b"helm_rs_free")?;
+            free(output);
+            Ok(bytes)
+        }
+    }
+}
+
+#[cfg(feature = "loader")]
+fn decode_module_error(bytes: &[u8]) -> LoadError {
+    match serde_json::from_slice::<AbiError>(bytes) {
+        Ok(error) => LoadError::Module {
+            code: error.code,
+            message: error.message,
+        },
+        Err(error) => LoadError::Decode(error),
+    }
 }
