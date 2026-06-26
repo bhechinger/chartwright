@@ -132,6 +132,8 @@ pub enum LoadError {
     Decode(serde_json::Error),
     #[error("module returned abi misuse code {0}")]
     Abi(i32),
+    #[error("module abi version mismatch: expected {expected}, got {actual}")]
+    AbiVersionMismatch { expected: u32, actual: u32 },
     #[error("module error {code}: {message}")]
     Module { code: String, message: String },
 }
@@ -146,18 +148,26 @@ impl LoadedChartModule {
     pub fn load(path: impl AsRef<std::path::Path>) -> Result<Self, LoadError> {
         let library = unsafe { libloading::Library::new(path.as_ref())? };
         unsafe {
-            let _: libloading::Symbol<RenderJson> = library.get(b"helm_rs_render_json")?;
-            let _: libloading::Symbol<ModuleInfoFn> = library.get(b"helm_rs_module_info")?;
-            let _: libloading::Symbol<FreeBuffer> = library.get(b"helm_rs_free")?;
+            let _: libloading::Symbol<RenderJson> = library.get(b"chartwright_render_json")?;
+            let _: libloading::Symbol<ModuleInfoFn> = library.get(b"chartwright_module_info")?;
+            let _: libloading::Symbol<FreeBuffer> = library.get(b"chartwright_free")?;
         }
-        Ok(Self { library })
+        let module = Self { library };
+        let info = module.info()?;
+        if info.abi_version != ABI_VERSION {
+            return Err(LoadError::AbiVersionMismatch {
+                expected: ABI_VERSION,
+                actual: info.abi_version,
+            });
+        }
+        Ok(module)
     }
 
     pub fn info(&self) -> Result<ModuleInfo, LoadError> {
         let mut output = AbiBuffer::empty();
         let code = unsafe {
             let module_info: libloading::Symbol<ModuleInfoFn> =
-                self.library.get(b"helm_rs_module_info")?;
+                self.library.get(b"chartwright_module_info")?;
             module_info(&mut output)
         };
         let bytes = self.take_output(output)?;
@@ -173,7 +183,7 @@ impl LoadedChartModule {
         let mut output = AbiBuffer::empty();
         let code = unsafe {
             let render: libloading::Symbol<RenderJson> =
-                self.library.get(b"helm_rs_render_json")?;
+                self.library.get(b"chartwright_render_json")?;
             render(request.as_ptr(), request.len(), &mut output)
         };
         let bytes = self.take_output(output)?;
@@ -187,7 +197,7 @@ impl LoadedChartModule {
     fn take_output(&self, output: AbiBuffer) -> Result<Vec<u8>, LoadError> {
         unsafe {
             let bytes = output.as_slice().to_vec();
-            let free: libloading::Symbol<FreeBuffer> = self.library.get(b"helm_rs_free")?;
+            let free: libloading::Symbol<FreeBuffer> = self.library.get(b"chartwright_free")?;
             free(output);
             Ok(bytes)
         }

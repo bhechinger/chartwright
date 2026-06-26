@@ -187,7 +187,7 @@ fn collect_helpers(chart: &Chart) -> Result<BTreeMap<String, String>, RenderErro
         let mut rest = file.content.as_str();
         while let Some(start) = rest.find("define") {
             let before = &rest[..start];
-            let action_start = before.rfind("{{").ok_or_else(|| RenderError::Template {
+            before.rfind("{{").ok_or_else(|| RenderError::Template {
                 path: file.path.clone(),
                 message: "define outside template action".to_owned(),
             })?;
@@ -217,19 +217,30 @@ fn collect_helpers(chart: &Chart) -> Result<BTreeMap<String, String>, RenderErro
                         message: "helper define action is unterminated".to_owned(),
                     })?
                 + 2;
-            let end = rest[body_start..]
-                .find("{{- end -}}")
-                .or_else(|| rest[body_start..].find("{{ end }}"))
-                .ok_or_else(|| RenderError::Template {
+            let (end, end_len) =
+                find_helper_end(&rest[body_start..]).ok_or_else(|| RenderError::Template {
                     path: file.path.clone(),
                     message: "helper define is missing end".to_owned(),
                 })?;
             let body = rest[body_start..body_start + end].trim().to_owned();
             helpers.insert(name.to_owned(), body);
-            rest = &rest[action_start + body_start + end..];
+            rest = &rest[body_start + end + end_len..];
         }
     }
     Ok(helpers)
+}
+
+fn find_helper_end(input: &str) -> Option<(usize, usize)> {
+    [
+        "{{- end -}}",
+        "{{- end}}",
+        "{{end -}}",
+        "{{end}}",
+        "{{ end }}",
+    ]
+    .iter()
+    .filter_map(|marker| input.find(marker).map(|index| (index, marker.len())))
+    .min_by_key(|(index, _)| *index)
 }
 
 fn render_template(
@@ -258,8 +269,10 @@ fn render_template(
             .trim_start_matches('-')
             .trim_end_matches('-')
             .trim();
-        let value = eval_pipeline(action, path, root, helpers)?;
-        output.push_str(&value_to_output(&value));
+        if !(action.starts_with("/*") && action.ends_with("*/")) {
+            let value = eval_pipeline(action, path, root, helpers)?;
+            output.push_str(&value_to_output(&value));
+        }
         rest = &after_open[end + 2..];
         if trim_right {
             rest = rest.trim_start_matches(char::is_whitespace);

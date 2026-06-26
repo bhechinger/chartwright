@@ -18,18 +18,18 @@ This approach keeps generated artifacts deterministic, makes compatibility testa
 
 The repository will be a Rust workspace with these crates:
 
-- `helm-rs-cli`: command-line importer.
-- `helm-rs-runtime`: chart model, values merging, template rendering, manifest assembly, and errors.
-- `helm-rs-abi`: shared ABI types and host-facing loading helpers.
+- `chartwright-cli`: command-line importer.
+- `chartwright-runtime`: chart model, values merging, template rendering, manifest assembly, and errors.
+- `chartwright-abi`: shared ABI types and host-facing loading helpers.
 
-Generated chart crates will depend on `helm-rs-runtime` and `helm-rs-abi`. They will expose C ABI functions for dynamic loading and can also expose a normal Rust API for static linking in tests.
+Generated chart crates will depend on `chartwright-runtime` and `chartwright-abi`. They will expose C ABI functions for dynamic loading and can also expose a normal Rust API for static linking in tests.
 
 ## CLI Behavior
 
 The initial importer command:
 
 ```text
-helm-rs import <chart-dir> --crate-dir <out-dir>
+chartwright import <chart-dir> --crate-dir <out-dir>
 ```
 
 The command validates that `<chart-dir>` contains a Helm chart, reads the chart contents, and writes a generated Rust crate to `<out-dir>`.
@@ -38,7 +38,7 @@ The generated crate includes:
 
 - `Cargo.toml` configured for `cdylib` output.
 - Rust source that embeds `Chart.yaml`, `values.yaml`, template files, and helper templates.
-- A small generated chart descriptor that passes embedded files to `helm-rs-runtime`.
+- A small generated chart descriptor that passes embedded files to `chartwright-runtime`.
 - ABI exports for host programs.
 
 The importer should preserve enough source path metadata for errors to point back to the originating chart file.
@@ -63,11 +63,11 @@ Render output is a UTF-8 YAML stream containing all rendered manifests.
 
 The generated library exports:
 
-- `helm_rs_render_json(input_ptr, input_len, out_ptr)`: renders from JSON input and writes an owned output buffer handle into `out_ptr`.
-- `helm_rs_free(buffer)`: releases buffers allocated by the module. The host must free every successful render or metadata result with this function from the same loaded library.
-- `helm_rs_module_info()`: returns module metadata such as chart name, chart version, generated schema version, and runtime compatibility version through the same owned-buffer mechanism.
+- `chartwright_render_json(input_ptr, input_len, out_ptr)`: renders from JSON input and writes an owned output buffer handle into `out_ptr`.
+- `chartwright_free(buffer)`: releases buffers allocated by the module. The host must free every successful render or metadata result with this function from the same loaded library.
+- `chartwright_module_info()`: returns module metadata such as chart name, chart version, generated schema version, and runtime compatibility version through the same owned-buffer mechanism.
 
-The exact ABI structs will be defined in `helm-rs-abi` and versioned. Errors cross the ABI as structured JSON containing an error code, message, and optional file/line context.
+The exact ABI structs will be defined in `chartwright-abi` and versioned. Errors cross the ABI as structured JSON containing an error code, message, and optional file/line context.
 
 ## Runtime Rendering Semantics
 
@@ -137,7 +137,7 @@ Golden outputs are acceptable for deterministic fixture charts. Helm comparison 
 The first complete implementation is acceptable when:
 
 - `cargo test` passes for the workspace;
-- `helm-rs import fixtures/basic-chart --crate-dir <tmp>` creates a buildable generated crate;
+- `chartwright import fixtures/basic-chart --crate-dir <tmp>` creates a buildable generated crate;
 - the generated crate builds as a dynamic library;
 - a Rust host can hot-load the generated library, call the render ABI, and receive YAML;
 - the basic fixture output matches the fixture golden output;

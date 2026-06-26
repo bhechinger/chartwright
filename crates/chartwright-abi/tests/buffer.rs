@@ -1,4 +1,4 @@
-use helm_rs_abi::{
+use chartwright_abi::{
     buffer_from_bytes, error_buffer, free_buffer, AbiBuffer, AbiResult, ModuleInfo, RenderRequest,
 };
 

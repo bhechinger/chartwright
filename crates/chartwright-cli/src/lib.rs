@@ -1,111 +1,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
+pub use chartwright_events::{
+    Event, EventLevel, EventSink, InMemoryEventSink, NoopEventSink, StderrEventSink,
+};
 use thiserror::Error;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum EventLevel {
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Event {
-    StepStarted {
-        id: String,
-        label: String,
-        detail: Option<String>,
-    },
-    StepDetail {
-        id: String,
-        detail: String,
-    },
-    StepFinished {
-        id: String,
-        message: String,
-        elapsed: Duration,
-    },
-    StepFailed {
-        id: String,
-        message: String,
-    },
-    Log {
-        level: EventLevel,
-        message: String,
-    },
-}
-
-pub trait EventSink: Clone + Send + Sync + 'static {
-    fn emit(&self, event: Event);
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct NoopEventSink;
-
-impl EventSink for NoopEventSink {
-    fn emit(&self, _event: Event) {}
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct InMemoryEventSink {
-    events: Arc<Mutex<Vec<Event>>>,
-}
-
-impl InMemoryEventSink {
-    pub fn events(&self) -> Vec<Event> {
-        self.events
-            .lock()
-            .expect("event sink lock poisoned")
-            .clone()
-    }
-}
-
-impl EventSink for InMemoryEventSink {
-    fn emit(&self, event: Event) {
-        self.events
-            .lock()
-            .expect("event sink lock poisoned")
-            .push(event);
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct StderrEventSink;
-
-impl EventSink for StderrEventSink {
-    fn emit(&self, event: Event) {
-        match event {
-            Event::StepStarted { label, detail, .. } => {
-                if let Some(detail) = detail {
-                    eprintln!("info: {label}: {detail}");
-                } else {
-                    eprintln!("info: {label}: started");
-                }
-            }
-            Event::StepDetail { detail, .. } => eprintln!("debug: {detail}"),
-            Event::StepFinished {
-                message, elapsed, ..
-            } => eprintln!("info: {message} ({elapsed:?})"),
-            Event::StepFailed { message, .. } => eprintln!("error: {message}"),
-            Event::Log { level, message } => eprintln!("{}: {message}", level.as_str()),
-        }
-    }
-}
-
-impl EventLevel {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Debug => "debug",
-            Self::Info => "info",
-            Self::Warn => "warn",
-            Self::Error => "error",
-        }
-    }
-}
 
 #[derive(Clone)]
 struct EventProducer<S> {
@@ -269,11 +169,10 @@ fn import_chart_inner<S: EventSink>(
         source,
     })?;
 
-    let root = workspace_root();
     progress.detail(format!("writing {}", out_dir.join("Cargo.toml").display()));
     write_file(
         &out_dir.join("Cargo.toml"),
-        &generated_manifest(&chart_name, &root),
+        &generated_manifest(&chart_name, out_dir, &workspace_root()),
     )?;
     progress.detail(format!("writing {}", out_dir.join("src/lib.rs").display()));
     write_file(
@@ -330,8 +229,10 @@ fn collect_dir(
     Ok(())
 }
 
-fn generated_manifest(chart_name: &str, root: &Path) -> String {
+fn generated_manifest(chart_name: &str, out_dir: &Path, root: &Path) -> String {
     let package_name = sanitize_crate_name(chart_name);
+    let abi_path = relative_path(out_dir, &root.join("crates/chartwright-abi"));
+    let runtime_path = relative_path(out_dir, &root.join("crates/chartwright-runtime"));
     format!(
         r#"[package]
 name = "{package_name}"
@@ -342,12 +243,12 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-helm-rs-abi = {{ path = "{}", default-features = false }}
-helm-rs-runtime = {{ path = "{}" }}
+chartwright-abi = {{ path = "{}", default-features = false }}
+chartwright-runtime = {{ path = "{}" }}
 serde_json = "1"
 "#,
-        root.join("crates/helm-rs-abi").display(),
-        root.join("crates/helm-rs-runtime").display()
+        abi_path.display(),
+        runtime_path.display()
     )
 }
 
@@ -362,8 +263,8 @@ fn generated_lib_rs(chart_name: &str, chart_version: &str, files: &[SourceFile])
         })
         .collect::<String>();
     format!(
-        r#"use helm_rs_abi::{{buffer_from_bytes, error_buffer, free_buffer, AbiBuffer, ModuleInfo, RenderRequest, ABI_VERSION}};
-use helm_rs_runtime::{{render_chart, CapabilitiesInput, Chart, ChartFile, ReleaseInput, RenderInput}};
+        r#"use chartwright_abi::{{buffer_from_bytes, error_buffer, free_buffer, AbiBuffer, ModuleInfo, RenderRequest, ABI_VERSION}};
+use chartwright_runtime::{{render_chart, CapabilitiesInput, Chart, ChartFile, ReleaseInput, RenderInput}};
 
 fn chart() -> Chart {{
     Chart {{
@@ -388,7 +289,7 @@ fn render(input: RenderRequest) -> Result<String, String> {{
 }}
 
 #[no_mangle]
-pub unsafe extern "C" fn helm_rs_render_json(input_ptr: *const u8, input_len: usize, out_ptr: *mut AbiBuffer) -> i32 {{
+pub unsafe extern "C" fn chartwright_render_json(input_ptr: *const u8, input_len: usize, out_ptr: *mut AbiBuffer) -> i32 {{
     if input_ptr.is_null() || out_ptr.is_null() {{
         return 2;
     }}
@@ -413,7 +314,7 @@ pub unsafe extern "C" fn helm_rs_render_json(input_ptr: *const u8, input_len: us
 }}
 
 #[no_mangle]
-pub unsafe extern "C" fn helm_rs_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
+pub unsafe extern "C" fn chartwright_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
     if out_ptr.is_null() {{
         return 2;
     }}
@@ -421,7 +322,7 @@ pub unsafe extern "C" fn helm_rs_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
         abi_version: ABI_VERSION,
         chart_name: {chart_name:?}.to_owned(),
         chart_version: {chart_version:?}.to_owned(),
-        runtime_version: helm_rs_runtime::runtime_version().to_owned(),
+        runtime_version: chartwright_runtime::runtime_version().to_owned(),
     }};
     match serde_json::to_vec(&info) {{
         Ok(output) => {{
@@ -436,7 +337,7 @@ pub unsafe extern "C" fn helm_rs_module_info(out_ptr: *mut AbiBuffer) -> i32 {{
 }}
 
 #[no_mangle]
-pub unsafe extern "C" fn helm_rs_free(buffer: AbiBuffer) {{
+pub unsafe extern "C" fn chartwright_free(buffer: AbiBuffer) {{
     free_buffer(buffer);
 }}
 "#
@@ -467,8 +368,47 @@ fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("helm-rs-cli is under crates/helm-rs-cli")
+        .expect("chartwright-cli is under crates/chartwright-cli")
         .to_owned()
+}
+
+fn relative_path(from_dir: &Path, to: &Path) -> PathBuf {
+    let from = absolute_path(from_dir);
+    let to = absolute_path(to);
+    let from_components: Vec<_> = from.components().collect();
+    let to_components: Vec<_> = to.components().collect();
+    let common_len = from_components
+        .iter()
+        .zip(&to_components)
+        .take_while(|(left, right)| left == right)
+        .count();
+
+    if common_len == 0 {
+        return to;
+    }
+
+    let mut relative = PathBuf::new();
+    for _ in common_len..from_components.len() {
+        relative.push("..");
+    }
+    for component in &to_components[common_len..] {
+        relative.push(component.as_os_str());
+    }
+    if relative.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        relative
+    }
+}
+
+fn absolute_path(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_owned()
+    } else {
+        std::env::current_dir()
+            .expect("current directory is available")
+            .join(path)
+    }
 }
 
 fn read_to_string(path: &Path) -> Result<String, ImportError> {
