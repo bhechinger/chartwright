@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use chartwright_abi::{LoadedChartModule, RenderRequest};
 pub use chartwright_events::{
     Event, EventLevel, EventSink, InMemoryEventSink, NoopEventSink, StderrEventSink,
 };
@@ -79,10 +80,57 @@ pub enum ImportError {
     },
 }
 
+#[derive(Debug, Error)]
+pub enum RunError {
+    #[error("module load or render failed: {0}")]
+    Module(#[from] chartwright_abi::LoadError),
+    #[error("io error at {path}: {source}")]
+    Io {
+        path: String,
+        source: std::io::Error,
+    },
+    #[error("invalid values yaml at {path}: {source}")]
+    InvalidValuesYaml {
+        path: String,
+        source: serde_yaml::Error,
+    },
+    #[error("failed to convert values from yaml to json at {path}: {source}")]
+    InvalidValuesJson {
+        path: String,
+        source: serde_json::Error,
+    },
+}
+
 #[derive(Debug)]
 struct SourceFile {
     path: String,
     content: String,
+}
+
+pub fn run_chart_module(
+    library_path: impl AsRef<Path>,
+    request: RenderRequest,
+) -> Result<String, RunError> {
+    let module = LoadedChartModule::load(library_path)?;
+    module.render(request).map_err(RunError::from)
+}
+
+pub fn values_from_file(path: impl AsRef<Path>) -> Result<serde_json::Value, RunError> {
+    let path = path.as_ref();
+    let content = fs::read_to_string(path).map_err(|source| RunError::Io {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let yaml = serde_yaml::from_str::<serde_yaml::Value>(&content).map_err(|source| {
+        RunError::InvalidValuesYaml {
+            path: path.display().to_string(),
+            source,
+        }
+    })?;
+    serde_json::to_value(yaml).map_err(|source| RunError::InvalidValuesJson {
+        path: path.display().to_string(),
+        source,
+    })
 }
 
 pub fn import_chart(
@@ -238,6 +286,8 @@ fn generated_manifest(chart_name: &str, out_dir: &Path, root: &Path) -> String {
 name = "{package_name}"
 version = "0.1.0"
 edition = "2021"
+
+[workspace]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -402,13 +452,17 @@ fn relative_path(from_dir: &Path, to: &Path) -> PathBuf {
 }
 
 fn absolute_path(path: &Path) -> PathBuf {
-    if path.is_absolute() {
+    if let Ok(path) = path.canonicalize() {
+        return path;
+    }
+    let path = if path.is_absolute() {
         path.to_owned()
     } else {
         std::env::current_dir()
             .expect("current directory is available")
             .join(path)
-    }
+    };
+    path
 }
 
 fn read_to_string(path: &Path) -> Result<String, ImportError> {

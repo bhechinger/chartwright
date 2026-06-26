@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 clap.workspace = true
+chartwright-abi = { path = "../chartwright-abi" }
 chartwright-events = { path = "../chartwright-events" }
 chartwright-runtime = { path = "../chartwright-runtime" }
 serde_json.workspace = true

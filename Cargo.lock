@@ -131,6 +131,7 @@ dependencies = [
 name = "chartwright-cli"
 version = "0.1.0"
 dependencies = [
+ "chartwright-abi",
  "chartwright-events",
  "chartwright-runtime",
  "clap",
