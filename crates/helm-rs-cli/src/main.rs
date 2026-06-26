@@ -25,7 +25,11 @@ fn main() {
         Command::Import {
             chart_dir,
             crate_dir,
-        } => helm_rs_cli::import_chart(chart_dir, crate_dir),
+        } => helm_rs_cli::import_chart_with_events(
+            chart_dir,
+            crate_dir,
+            helm_rs_cli::StderrEventSink,
+        ),
     };
 
     if let Err(error) = result {

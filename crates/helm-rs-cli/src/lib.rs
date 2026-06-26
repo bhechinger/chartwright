@@ -1,7 +1,168 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EventLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Event {
+    StepStarted {
+        id: String,
+        label: String,
+        detail: Option<String>,
+    },
+    StepDetail {
+        id: String,
+        detail: String,
+    },
+    StepFinished {
+        id: String,
+        message: String,
+        elapsed: Duration,
+    },
+    StepFailed {
+        id: String,
+        message: String,
+    },
+    Log {
+        level: EventLevel,
+        message: String,
+    },
+}
+
+pub trait EventSink: Clone + Send + Sync + 'static {
+    fn emit(&self, event: Event);
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct NoopEventSink;
+
+impl EventSink for NoopEventSink {
+    fn emit(&self, _event: Event) {}
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct InMemoryEventSink {
+    events: Arc<Mutex<Vec<Event>>>,
+}
+
+impl InMemoryEventSink {
+    pub fn events(&self) -> Vec<Event> {
+        self.events
+            .lock()
+            .expect("event sink lock poisoned")
+            .clone()
+    }
+}
+
+impl EventSink for InMemoryEventSink {
+    fn emit(&self, event: Event) {
+        self.events
+            .lock()
+            .expect("event sink lock poisoned")
+            .push(event);
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct StderrEventSink;
+
+impl EventSink for StderrEventSink {
+    fn emit(&self, event: Event) {
+        match event {
+            Event::StepStarted { label, detail, .. } => {
+                if let Some(detail) = detail {
+                    eprintln!("info: {label}: {detail}");
+                } else {
+                    eprintln!("info: {label}: started");
+                }
+            }
+            Event::StepDetail { detail, .. } => eprintln!("debug: {detail}"),
+            Event::StepFinished {
+                message, elapsed, ..
+            } => eprintln!("info: {message} ({elapsed:?})"),
+            Event::StepFailed { message, .. } => eprintln!("error: {message}"),
+            Event::Log { level, message } => eprintln!("{}: {message}", level.as_str()),
+        }
+    }
+}
+
+impl EventLevel {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Debug => "debug",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+        }
+    }
+}
+
+#[derive(Clone)]
+struct EventProducer<S> {
+    sink: S,
+    id: String,
+    label: String,
+    started: Instant,
+}
+
+impl<S: EventSink> EventProducer<S> {
+    fn start(sink: S, id: impl Into<String>, label: impl Into<String>, detail: String) -> Self {
+        let id = id.into();
+        let label = label.into();
+        sink.emit(Event::StepStarted {
+            id: id.clone(),
+            label: label.clone(),
+            detail: Some(detail),
+        });
+        Self {
+            sink,
+            id,
+            label,
+            started: Instant::now(),
+        }
+    }
+
+    fn detail(&self, detail: impl Into<String>) {
+        self.sink.emit(Event::StepDetail {
+            id: self.id.clone(),
+            detail: detail.into(),
+        });
+    }
+
+    fn log(&self, level: EventLevel, message: impl Into<String>) {
+        self.sink.emit(Event::Log {
+            level,
+            message: message.into(),
+        });
+    }
+
+    fn finish(&self, message: impl Into<String>) {
+        self.sink.emit(Event::StepFinished {
+            id: self.id.clone(),
+            message: message.into(),
+            elapsed: self.started.elapsed(),
+        });
+    }
+
+    fn fail(&self, message: impl Into<String>) {
+        let message = message.into();
+        self.sink.emit(Event::StepFailed {
+            id: self.id.clone(),
+            message: format!("{}: {message}", self.label),
+        });
+        self.log(EventLevel::Error, message);
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum ImportError {
@@ -28,15 +189,44 @@ pub fn import_chart(
     chart_dir: impl AsRef<Path>,
     out_dir: impl AsRef<Path>,
 ) -> Result<(), ImportError> {
+    import_chart_with_events(chart_dir, out_dir, NoopEventSink)
+}
+
+pub fn import_chart_with_events<S: EventSink>(
+    chart_dir: impl AsRef<Path>,
+    out_dir: impl AsRef<Path>,
+    events: S,
+) -> Result<(), ImportError> {
     let chart_dir = chart_dir.as_ref();
     let out_dir = out_dir.as_ref();
+    let progress = EventProducer::start(
+        events,
+        "import-chart",
+        "import chart",
+        format!("{} -> {}", chart_dir.display(), out_dir.display()),
+    );
+    let result = import_chart_inner(chart_dir, out_dir, &progress);
+    match &result {
+        Ok(()) => progress.finish(format!("generated chart crate at {}", out_dir.display())),
+        Err(error) => progress.fail(error.to_string()),
+    }
+    result
+}
+
+fn import_chart_inner<S: EventSink>(
+    chart_dir: &Path,
+    out_dir: &Path,
+    progress: &EventProducer<S>,
+) -> Result<(), ImportError> {
     let chart_yaml_path = chart_dir.join("Chart.yaml");
+    progress.detail(format!("checking {}", chart_yaml_path.display()));
     if !chart_yaml_path.exists() {
         return Err(ImportError::MissingChartYaml(
             chart_yaml_path.display().to_string(),
         ));
     }
 
+    progress.detail(format!("reading {}", chart_yaml_path.display()));
     let chart_yaml = read_to_string(&chart_yaml_path)?;
     let chart_doc: serde_yaml::Value =
         serde_yaml::from_str(&chart_yaml).map_err(ImportError::InvalidChartYaml)?;
@@ -50,6 +240,7 @@ pub fn import_chart(
         .and_then(serde_yaml::Value::as_str)
         .unwrap_or("0.0.0")
         .to_owned();
+    progress.detail(format!("parsed chart {chart_name} {chart_version}"));
 
     let mut files = vec![SourceFile {
         path: "Chart.yaml".to_owned(),
@@ -57,24 +248,34 @@ pub fn import_chart(
     }];
     let values_path = chart_dir.join("values.yaml");
     if values_path.exists() {
+        progress.detail(format!("reading {}", values_path.display()));
         files.push(SourceFile {
             path: "values.yaml".to_owned(),
             content: read_to_string(&values_path)?,
         });
+    } else {
+        progress.log(
+            EventLevel::Warn,
+            format!("values.yaml not found under {}", chart_dir.display()),
+        );
     }
     collect_template_files(chart_dir, &mut files)?;
     files.sort_by(|left, right| left.path.cmp(&right.path));
+    progress.detail(format!("collected {} chart files", files.len()));
 
+    progress.detail(format!("creating {}", out_dir.join("src").display()));
     fs::create_dir_all(out_dir.join("src")).map_err(|source| ImportError::Io {
         path: out_dir.join("src").display().to_string(),
         source,
     })?;
 
     let root = workspace_root();
+    progress.detail(format!("writing {}", out_dir.join("Cargo.toml").display()));
     write_file(
         &out_dir.join("Cargo.toml"),
         &generated_manifest(&chart_name, &root),
     )?;
+    progress.detail(format!("writing {}", out_dir.join("src/lib.rs").display()));
     write_file(
         &out_dir.join("src/lib.rs"),
         &generated_lib_rs(&chart_name, &chart_version, &files),

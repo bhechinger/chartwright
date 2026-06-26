@@ -1,4 +1,4 @@
-use helm_rs_cli::import_chart;
+use helm_rs_cli::{import_chart, import_chart_with_events, Event, EventLevel, InMemoryEventSink};
 
 #[test]
 fn imports_basic_chart_to_generated_crate() {
@@ -15,4 +15,49 @@ fn imports_basic_chart_to_generated_crate() {
     assert!(lib_rs.contains("Chart.yaml"));
     assert!(lib_rs.contains("templates/configmap.yaml"));
     assert!(lib_rs.contains("templates/_helpers.tpl"));
+}
+
+#[test]
+fn import_emits_detailed_status_events() {
+    let temp = tempfile::tempdir().unwrap();
+    let out_dir = temp.path().join("generated-basic-chart");
+    let events = InMemoryEventSink::default();
+
+    import_chart_with_events("../../fixtures/basic-chart", &out_dir, events.clone()).unwrap();
+
+    let emitted = events.events();
+    assert!(matches!(
+        &emitted[0],
+        Event::StepStarted { label, detail: Some(detail), .. }
+            if label == "import chart" && detail.contains("fixtures/basic-chart")
+    ));
+    assert!(emitted.iter().any(|event| matches!(
+        event,
+        Event::StepDetail { detail, .. } if detail == "parsed chart basic-chart 0.1.0"
+    )));
+    assert!(emitted.iter().any(|event| matches!(
+        event,
+        Event::StepDetail { detail, .. } if detail == "collected 4 chart files"
+    )));
+    assert!(emitted.iter().any(|event| matches!(
+        event,
+        Event::StepFinished { message, .. } if message.contains("generated chart crate")
+    )));
+}
+
+#[test]
+fn import_emits_error_event_on_failure() {
+    let temp = tempfile::tempdir().unwrap();
+    let missing_chart = temp.path().join("missing-chart");
+    let out_dir = temp.path().join("generated-missing-chart");
+    let events = InMemoryEventSink::default();
+
+    let err = import_chart_with_events(&missing_chart, &out_dir, events.clone()).unwrap_err();
+
+    assert!(err.to_string().contains("Chart.yaml"));
+    assert!(events.events().iter().any(|event| matches!(
+        event,
+        Event::Log { level: EventLevel::Error, message }
+            if message.contains("chart is missing Chart.yaml")
+    )));
 }
