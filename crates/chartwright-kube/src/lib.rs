@@ -418,7 +418,12 @@ pub async fn apply_rendered_chart<S: EventSink>(
     events: S,
 ) -> Result<ApplyReport, KubeApplyError> {
     if options.dry_run {
-        return build_apply_plan(rendered_yaml, None, options, events);
+        let previous_inventory = if options.prune {
+            read_inventory(client, &options).await?
+        } else {
+            None
+        };
+        return build_apply_plan(rendered_yaml, previous_inventory, options, events);
     }
 
     events.emit(Event::StepStarted {

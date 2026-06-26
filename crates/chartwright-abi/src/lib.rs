@@ -132,6 +132,8 @@ pub enum LoadError {
     Decode(serde_json::Error),
     #[error("module returned abi misuse code {0}")]
     Abi(i32),
+    #[error("module abi version mismatch: expected {expected}, got {actual}")]
+    AbiVersionMismatch { expected: u32, actual: u32 },
     #[error("module error {code}: {message}")]
     Module { code: String, message: String },
 }
@@ -150,7 +152,15 @@ impl LoadedChartModule {
             let _: libloading::Symbol<ModuleInfoFn> = library.get(b"chartwright_module_info")?;
             let _: libloading::Symbol<FreeBuffer> = library.get(b"chartwright_free")?;
         }
-        Ok(Self { library })
+        let module = Self { library };
+        let info = module.info()?;
+        if info.abi_version != ABI_VERSION {
+            return Err(LoadError::AbiVersionMismatch {
+                expected: ABI_VERSION,
+                actual: info.abi_version,
+            });
+        }
+        Ok(module)
     }
 
     pub fn info(&self) -> Result<ModuleInfo, LoadError> {

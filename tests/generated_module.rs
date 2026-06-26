@@ -180,6 +180,41 @@ fn safe_loader_returns_module_errors() {
     }
 }
 
+#[test]
+fn safe_loader_rejects_abi_version_mismatch() {
+    let temp = tempfile::tempdir().unwrap();
+    let generated = temp.path().join("generated-basic-chart");
+    chartwright_cli::import_chart("fixtures/basic-chart", &generated).unwrap();
+    let lib_rs = generated.join("src/lib.rs");
+    let source = std::fs::read_to_string(&lib_rs).unwrap();
+    std::fs::write(
+        &lib_rs,
+        source.replace("abi_version: ABI_VERSION,", "abi_version: ABI_VERSION + 1,"),
+    )
+    .unwrap();
+
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--release")
+        .current_dir(&generated)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let error = match LoadedChartModule::load(dynamic_library_path(&generated, "basic_chart")) {
+        Ok(_) => panic!("module with mismatched abi should not load"),
+        Err(error) => error,
+    };
+
+    match error {
+        LoadError::AbiVersionMismatch { expected, actual } => {
+            assert_eq!(expected, chartwright_abi::ABI_VERSION);
+            assert_eq!(actual, chartwright_abi::ABI_VERSION + 1);
+        }
+        other => panic!("expected abi version mismatch, got {other:?}"),
+    }
+}
+
 fn dynamic_library_path(crate_dir: &std::path::Path, crate_name: &str) -> std::path::PathBuf {
     let file_name = if cfg!(target_os = "macos") {
         format!("lib{crate_name}.dylib")

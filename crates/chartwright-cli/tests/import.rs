@@ -4,7 +4,8 @@ use chartwright_cli::{
 
 #[test]
 fn imports_basic_chart_to_generated_crate() {
-    let temp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all("../../target").unwrap();
+    let temp = tempfile::tempdir_in("../../target").unwrap();
     let out_dir = temp.path().join("generated-basic-chart");
 
     import_chart("../../fixtures/basic-chart", &out_dir).unwrap();
@@ -13,6 +14,13 @@ fn imports_basic_chart_to_generated_crate() {
     let lib_rs = std::fs::read_to_string(out_dir.join("src/lib.rs")).unwrap();
 
     assert!(cargo_toml.contains("crate-type = [\"cdylib\", \"rlib\"]"));
+    let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap()
+        .display()
+        .to_string();
+    assert!(!cargo_toml.contains(&workspace_root));
     assert!(lib_rs.contains("chartwright_render_json"));
     assert!(lib_rs.contains("Chart.yaml"));
     assert!(lib_rs.contains("templates/configmap.yaml"));
