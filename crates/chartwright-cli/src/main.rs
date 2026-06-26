@@ -56,49 +56,36 @@ fn main() {
             values,
             kube_version,
             api_versions,
-        } => run_chart_module(
-            library_path,
-            release_name,
-            namespace,
-            values,
-            kube_version,
-            api_versions,
-        )
-        .map_err(Into::into),
+        } => {
+            let values = match values {
+                Some(path) => chartwright_cli::values_from_file(path),
+                None => Ok(json!({})),
+            };
+            values
+                .and_then(|values| {
+                    let rendered = chartwright_cli::run_chart_module(
+                        library_path,
+                        RenderRequest {
+                            release_name,
+                            namespace,
+                            values,
+                            kube_version,
+                            api_versions,
+                        },
+                    )?;
+                    std::io::stdout()
+                        .write_all(rendered.as_bytes())
+                        .map_err(|source| chartwright_cli::RunError::Io {
+                            path: "stdout".to_owned(),
+                            source,
+                        })
+                })
+                .map_err(Into::into)
+        }
     };
 
     if let Err(error) = result {
         eprintln!("error: {error}");
         std::process::exit(1);
     }
-}
-
-fn run_chart_module(
-    library_path: PathBuf,
-    release_name: String,
-    namespace: String,
-    values: Option<PathBuf>,
-    kube_version: String,
-    api_versions: Vec<String>,
-) -> Result<(), chartwright_cli::RunError> {
-    let values = match values {
-        Some(path) => chartwright_cli::values_from_file(path),
-        None => Ok(json!({})),
-    }?;
-    let rendered = chartwright_cli::run_chart_module(
-        library_path,
-        RenderRequest {
-            release_name,
-            namespace,
-            values,
-            kube_version,
-            api_versions,
-        },
-    )?;
-    std::io::stdout()
-        .write_all(rendered.as_bytes())
-        .map_err(|source| chartwright_cli::RunError::Io {
-            path: "stdout".to_owned(),
-            source,
-        })
 }
