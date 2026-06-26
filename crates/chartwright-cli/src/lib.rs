@@ -455,14 +455,13 @@ fn absolute_path(path: &Path) -> PathBuf {
     if let Ok(path) = path.canonicalize() {
         return path;
     }
-    let path = if path.is_absolute() {
+    if path.is_absolute() {
         path.to_owned()
     } else {
         std::env::current_dir()
             .expect("current directory is available")
             .join(path)
-    };
-    path
+    }
 }
 
 fn read_to_string(path: &Path) -> Result<String, ImportError> {
